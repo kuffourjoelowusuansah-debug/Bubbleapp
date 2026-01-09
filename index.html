@@ -1,0 +1,66 @@
+import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import MuxPlayer from '@mux/mux-player-react';
+import { Heart, MessageCircle, PlusCircle } from 'lucide-react';
+
+// Connects to the keys you will set in Vercel Step 3
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+export default function Bubble() {
+  const [videos, setVideos] = useState([]);
+
+  useEffect(() => {
+    const fetchVideos = async () => {
+      const { data } = await supabase.from('videos').select('*').order('created_at', { ascending: false });
+      if (data) setVideos(data);
+    };
+    fetchVideos();
+  }, []);
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Upload file to Supabase Storage
+    const fileName = `${Date.now()}-${file.name}`;
+    const { data } = await supabase.storage.from('bubbles').upload(fileName, file);
+    
+    if (data) {
+      const { data: urlData } = supabase.storage.from('bubbles').getPublicUrl(fileName);
+      // Save to Database
+      await supabase.from('videos').insert([{ 
+        video_url: urlData.publicUrl, 
+        caption: "New Bubble Video!",
+        playback_id: "" // Add Mux ID here later for pro streaming
+      }]);
+      window.location.reload(); 
+    }
+  };
+
+  return (
+    <div className="bg-black h-screen w-full flex justify-center">
+      <div className="w-full max-w-md h-full overflow-y-scroll snap-y snap-mandatory scrollbar-hide">
+        {videos.map((v) => (
+          <div key={v.id} className="relative h-full w-full snap-start border-b border-gray-900">
+            <video src={v.video_url} className="h-full w-full object-cover" loop autoPlay muted />
+            <div className="absolute bottom-10 left-4 text-white p-4">
+              <p className="font-bold">@bubble_user</p>
+              <p className="text-sm">{v.caption}</p>
+            </div>
+            <div className="absolute right-4 bottom-20 flex flex-col space-y-6 text-white">
+               <Heart className="hover:text-red-500 cursor-pointer" size={32} />
+               <MessageCircle size={32} />
+            </div>
+          </div>
+        ))}
+        <label className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-cyan-500 p-4 rounded-full text-white shadow-lg cursor-pointer">
+          <PlusCircle size={32} />
+          <input type="file" className="hidden" onChange={handleUpload} accept="video/*" />
+        </label>
+      </div>
+    </div>
+  );
+}
